@@ -212,8 +212,8 @@ int uwsgi_proto_uwsgi_parser_unix(struct wsgi_request *wsgi_req) {
 */
 
 void uwsgi_proto_uwsgi_setup(struct uwsgi_socket *uwsgi_sock) {
-	uwsgi_sock->proto = uwsgi_proto_uwsgi_parser;
-	uwsgi_sock->proto_accept = uwsgi_proto_base_accept;
+	uwsgi_sock->proto = uwsgi_proto_uwsgi_parser; // 如何解析数据
+	uwsgi_sock->proto_accept = uwsgi_proto_base_accept; // 如何accept请求 ....如何处理呢?
 	uwsgi_sock->proto_prepare_headers = uwsgi_proto_base_prepare_headers;
 	uwsgi_sock->proto_add_header = uwsgi_proto_base_add_header;
 	uwsgi_sock->proto_fix_headers = uwsgi_proto_base_fix_headers;

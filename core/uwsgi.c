@@ -1455,28 +1455,24 @@ static struct uwsgi_option uwsgi_base_options[] =
                                                 uwsgi_opt_set_str, &uwsgi.force_cwd, 0 }, { "binsh", required_argument,
                                                 0,
                                                 "override /bin/sh (used by exec hooks, it always fallback to /bin/sh)",
-                                                uwsgi_opt_add_string_list, &uwsgi.binsh, 0 }, { "chdir",
-                                                required_argument, 0,
-                                                "chdir to specified directory before apps loading", uwsgi_opt_set_str,
-                                                &uwsgi.chdir, 0 }, { "chdir2", required_argument, 0,
-                                                "chdir to specified directory after apps loading", uwsgi_opt_set_str,
-                                                &uwsgi.chdir2, 0 }, { "lazy", no_argument, 0,
-                                                "set lazy mode (load apps in workers instead of master)",
-                                                uwsgi_opt_true, &uwsgi.lazy, 0 }, { "lazy-apps", no_argument, 0,
-                                                "load apps in each worker instead of the master", uwsgi_opt_true,
-                                                &uwsgi.lazy_apps, 0 }, { "cheap", no_argument, 0,
-                                                "set cheap mode (spawn workers only after the first request)",
-                                                uwsgi_opt_true, &uwsgi.status.is_cheap, UWSGI_OPT_MASTER }, { "cheaper",
-                                                required_argument, 0, "set cheaper mode (adaptive process spawning)",
-                                                uwsgi_opt_set_int, &uwsgi.cheaper_count, UWSGI_OPT_MASTER
-                                                                | UWSGI_OPT_CHEAPER }, { "cheaper-initial",
-                                                required_argument, 0,
-                                                "set the initial number of processes to spawn in cheaper mode",
-                                                uwsgi_opt_set_int, &uwsgi.cheaper_initial, UWSGI_OPT_MASTER
-                                                                | UWSGI_OPT_CHEAPER }, { "cheaper-algo",
-                                                required_argument, 0,
-                                                "choose to algorithm used for adaptive process spawning",
-                                                uwsgi_opt_set_str, &uwsgi.requested_cheaper_algo, UWSGI_OPT_MASTER }, {
+                                                uwsgi_opt_add_string_list, &uwsgi.binsh, 0 },
+
+                                // 有两次chdir的机会
+                                { "chdir", required_argument, 0, "chdir to specified directory before apps loading", uwsgi_opt_set_str, &uwsgi.chdir, 0 },
+                                { "chdir2", required_argument, 0, "chdir to specified directory after apps loading", uwsgi_opt_set_str, &uwsgi.chdir2, 0 },
+
+                                // 默认是lazy的，各个worker加载自己的代码
+                                // lazy为true, 那么各个worker的加载可以独立进行，不同的woker可以先后重启
+                                // lazy为false, 则master可以先加载，然后在fork worker, fork时代价小
+                                { "lazy", no_argument, 0, "set lazy mode (load apps in workers instead of master)", uwsgi_opt_true, &uwsgi.lazy, 0 },
+                                { "lazy-apps", no_argument, 0, "load apps in each worker instead of the master", uwsgi_opt_true, &uwsgi.lazy_apps, 0 },
+
+                                { "cheap", no_argument, 0, "set cheap mode (spawn workers only after the first request)", uwsgi_opt_true, &uwsgi.status.is_cheap, UWSGI_OPT_MASTER },
+                                { "cheaper", required_argument, 0, "set cheaper mode (adaptive process spawning)", uwsgi_opt_set_int, &uwsgi.cheaper_count, UWSGI_OPT_MASTER | UWSGI_OPT_CHEAPER },
+                                { "cheaper-initial", required_argument, 0, "set the initial number of processes to spawn in cheaper mode", uwsgi_opt_set_int, &uwsgi.cheaper_initial, UWSGI_OPT_MASTER | UWSGI_OPT_CHEAPER },
+                                { "cheaper-algo", required_argument, 0, "choose to algorithm used for adaptive process spawning", uwsgi_opt_set_str, &uwsgi.requested_cheaper_algo, UWSGI_OPT_MASTER },
+
+                                {
                                                 "cheaper-step", required_argument, 0,
                                                 "number of additional processes to spawn at each overload",
                                                 uwsgi_opt_set_int, &uwsgi.cheaper_step, UWSGI_OPT_MASTER
@@ -2211,13 +2207,31 @@ void gracefully_kill_them_all(int signum) {
     uwsgi_destroy_processes();
 }
 
+//void uwsgi_reload_workers() {
+//    int i;
+//    // 屏蔽信号
+//    uwsgi_block_signal(SIGHUP);
+//
+//    for (i = 1; i <= uwsgi.numproc; i++) {
+//        if (uwsgi.workers[i].pid > 0) {
+//            // 给各个子进程发送: SIGHUP信息
+//            uwsgi_curse(i, SIGHUP);
+//        }
+//    }
+//
+//    // 恢复信号
+//    uwsgi_unblock_signal(SIGHUP);
+//}
+
 // graceful reload
 void grace_them_all(int signum) {
+    // 对比和 uwsgi_reload_workers 之间的区别
     if (uwsgi_instance_is_reloading || uwsgi_instance_is_dying)
         return;
 
     int i;
 
+    // 如果是: lazy, 则和 uwsgi_reload_workers 几乎等价
     if (uwsgi.lazy) {
         for (i = 1; i <= uwsgi.numproc; i++) {
             if (uwsgi.workers[i].pid > 0) {
@@ -2241,6 +2255,8 @@ void grace_them_all(int signum) {
         uwsgi_unsubscribe_all();
     }
 
+    // 通知所有的进程重启
+    // 所有的进程几乎同时得到通知?
     for (i = 1; i <= uwsgi.numproc; i++) {
         if (uwsgi.workers[i].pid > 0) {
             uwsgi_curse(i, SIGHUP);
@@ -2756,6 +2772,7 @@ void uwsgi_flush_logs() {
     if (pfd.fd == -1)
         pfd.fd = 2;
 
+    // 通过异步io处理logs
     while (poll(&pfd, 1, 0) > 0) {
         if (uwsgi_master_log()) {
             break;
@@ -2955,6 +2972,7 @@ void uwsgi_setup(int argc, char *argv[], char *envp[]) {
     // allocate main shared memory
     uwsgi.shared = (struct uwsgi_shared *) uwsgi_calloc_shared(sizeof(struct uwsgi_shared));
 
+    // 初始化plugin, 默认都是空的
     // initialize request plugin to void
     for (i = 0; i < 256; i++) {
         uwsgi.p[i] = &unconfigured_plugin;
@@ -3661,9 +3679,11 @@ int uwsgi_start(void *v_argv) {
         }
 
         //now bind all the unbound sockets
+        // 绑定socket
         uwsgi_bind_sockets();
 
         // put listening socket in non-blocking state and set the protocol
+        // 设置socket的callback
         uwsgi_set_sockets_protocols();
 
     }
@@ -3904,7 +3924,7 @@ int uwsgi_start(void *v_argv) {
         }
     }
 
-    //init apps hook (if not lazy)
+    // init apps hook (if not lazy)
     if (!uwsgi.lazy && !uwsgi.lazy_apps) {
         uwsgi_init_all_apps();
     }

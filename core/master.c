@@ -521,6 +521,7 @@ int master_loop(char **argv, char **environ) {
     }
 
     // update touches timestamps
+    // 11. "启动阶段"，只记录初始的状态；不做控制使用
     uwsgi_check_touches(uwsgi.touch_reload);
     uwsgi_check_touches(uwsgi.touch_logrotate);
     uwsgi_check_touches(uwsgi.touch_logreopen);
@@ -570,6 +571,7 @@ int master_loop(char **argv, char **environ) {
         }
     }
     uwsgi_check_touches(uwsgi.hook_touch);
+    // }}} 以上处理各种touch状态的读取(完毕)
 
     // fsmon
     uwsgi_fsmon_setup();
@@ -833,18 +835,29 @@ int master_loop(char **argv, char **environ) {
 
             // check touch_reload
             // uwsgi如何重启呢?
+            // uwsgi_check_touches 投入使用
             if (!uwsgi_instance_is_reloading && !uwsgi_instance_is_dying) {
+                // 在主进程的死循环中，间隔各种Touch
                 // 检查指定的文件是否被touched(reloading过程中，dying时以及died，不考虑touch)
+
+                // TODO：
+                // 1. 我们目前采用的重启的方式?
+                // 似乎下面的方式2更好，代价更低
+                // 当然必要的时候也需要启动方式1, master的状态也需要调整
+                // 因此需要我们的开发、运维更加细致地了解
+                //
                 char *touched = uwsgi_check_touches(uwsgi.touch_reload);
                 if (touched) {
                     uwsgi_log_verbose("*** %s has been touched... grace them all !!! ***\n", touched);
                     uwsgi_block_signal(SIGHUP);
+
                     grace_them_all(0);
+
                     uwsgi_unblock_signal(SIGHUP);
                     continue;
                 }
 
-                // 只reload workers？
+                // 2. 只reload workers？
                 touched = uwsgi_check_touches(uwsgi.touch_workers_reload);
                 if (touched) {
                     uwsgi_log_verbose("*** %s has been touched... workers reload !!! ***\n", touched);

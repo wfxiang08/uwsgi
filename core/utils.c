@@ -1432,6 +1432,7 @@ int wsgi_req_recv(int queue, struct wsgi_request *wsgi_req) {
 void uwsgi_post_accept(struct wsgi_request *wsgi_req) {
 
 	// set close on exec (if not a new socket)
+    // 通过select/poll等交互
 	if (!wsgi_req->socket->edge_trigger && uwsgi.close_on_exec) {
 		if (fcntl(wsgi_req->fd, F_SETFD, FD_CLOEXEC) < 0) {
 			uwsgi_error("fcntl()");
@@ -1446,7 +1447,7 @@ void uwsgi_post_accept(struct wsgi_request *wsgi_req) {
 
 // accept a new request
 int wsgi_req_simple_accept(struct wsgi_request *wsgi_req, int fd) {
-
+    // 将fd封装成为: wsgi_req
 	wsgi_req->fd = wsgi_req->socket->proto_accept(wsgi_req, fd);
 
 	if (wsgi_req->fd < 0) {
@@ -1548,6 +1549,7 @@ int wsgi_req_accept(int queue, struct wsgi_request *wsgi_req) {
 	while (uwsgi_sock) {
 		if (interesting_fd == uwsgi_sock->fd || (uwsgi_sock->retry && uwsgi_sock->retry[wsgi_req->async_id]) || (uwsgi_sock->fd_threads && interesting_fd == uwsgi_sock->fd_threads[wsgi_req->async_id])) {
 			wsgi_req->socket = uwsgi_sock;
+			// 接受请求
 			wsgi_req->fd = wsgi_req->socket->proto_accept(wsgi_req, interesting_fd);
 			thunder_unlock;
 			if (wsgi_req->fd < 0) {
@@ -1562,7 +1564,7 @@ int wsgi_req_accept(int queue, struct wsgi_request *wsgi_req) {
 
 			return 0;
 		}
-
+		// 遍历到下一个可用的: uwsgi_sock->next
 		uwsgi_sock = uwsgi_sock->next;
 	}
 

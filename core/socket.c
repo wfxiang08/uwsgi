@@ -7,18 +7,20 @@ static int connect_to_tcp(char *, int, int, int);
 static int connect_to_udp(char *, int);
 
 void uwsgi_socket_setup_protocol(struct uwsgi_socket *uwsgi_sock, char *protocol) {
-        if (!protocol) protocol = "uwsgi";
-        struct uwsgi_protocol *up = uwsgi.protocols;
-        while(up) {
-                if (!strcmp(protocol, up->name)) {
-                        up->func(uwsgi_sock);
-                        return;
-                }
-                up = up->next;
+    if (!protocol) protocol = "uwsgi";
+    struct uwsgi_protocol *up = uwsgi.protocols;
+    // 通过 uwsgi.protocols 来处理 uwsgi_sock
+    while(up) {
+        if (!strcmp(protocol, up->name)) {
+            // func为各种setup函数，例如: uwsgi_proto_uwsgi_setup
+            up->func(uwsgi_sock);
+            return;
         }
+        up = up->next;
+    }
 
-        uwsgi_log("unable to find protocol %s\n", protocol);
-        exit(1);
+    uwsgi_log("unable to find protocol %s\n", protocol);
+    exit(1);
 }
 
 
@@ -1841,6 +1843,7 @@ stdin_done:
 
 }
 
+// 为各种socket设置协议相关的callbacks
 void uwsgi_set_sockets_protocols() {
 
 	struct uwsgi_socket *uwsgi_sock = uwsgi.sockets;
@@ -1849,8 +1852,11 @@ void uwsgi_set_sockets_protocols() {
 
 		if (uwsgi_sock->lazy)
 			goto setup_proto;
+
+		// 还没有bound
 		if (!uwsgi_sock->bound || uwsgi_sock->fd == -1)
 			goto nextsock;
+
 		if (!uwsgi_sock->per_core) {
 			uwsgi_sock->arg = fcntl(uwsgi_sock->fd, F_GETFL, NULL);
 			if (uwsgi_sock->arg < 0) {
@@ -1866,7 +1872,10 @@ void uwsgi_set_sockets_protocols() {
 
 
 setup_proto:
+        // 如果没有指定protocol, 则使用默认的
 		if (!requested_protocol) requested_protocol = uwsgi.protocol;
+
+		// 为uwsgi_sock设置各种协议，例如: uwsgi_proto_uwsgi_setup
 		uwsgi_socket_setup_protocol(uwsgi_sock, requested_protocol);
 nextsock:
 		uwsgi_sock = uwsgi_sock->next;
@@ -1886,8 +1895,9 @@ void uwsgi_tcp_nodelay(int fd) {
 
 int uwsgi_accept(int server_fd) {
 	struct sockaddr_un client_src;
-        memset(&client_src, 0, sizeof(struct sockaddr_un));
-        socklen_t client_src_len = 0;
+    memset(&client_src, 0, sizeof(struct sockaddr_un));
+    socklen_t client_src_len = 0;
+
 #if defined(__linux__) && defined(SOCK_NONBLOCK) && !defined(OBSOLETE_LINUX_KERNEL)
         return accept4(server_fd, (struct sockaddr *) &client_src, &client_src_len, SOCK_NONBLOCK);
 #elif defined(__linux__)
@@ -1897,12 +1907,16 @@ int uwsgi_accept(int server_fd) {
         }
         return client_fd;
 #else
- 	return accept(server_fd, (struct sockaddr *) &client_src, &client_src_len);
+ 	// 接受一个来自fd的请求
+    return accept(server_fd, (struct sockaddr *) &client_src, &client_src_len);
 #endif
 
 
 }
 
+//
+// 注册protocol, 返回已注册，或新注册的protocol
+//
 struct uwsgi_protocol *uwsgi_register_protocol(char *name, void (*func)(struct uwsgi_socket *)) {
 	struct uwsgi_protocol *old_up = NULL, *up = uwsgi.protocols;
 	while(up) {
@@ -1938,6 +1952,7 @@ int uwsgi_socket_passcred(int fd) {
 #endif
 }
 
+// 注册各种协议
 void uwsgi_protocols_register() {
 	uwsgi_register_protocol("uwsgi", uwsgi_proto_uwsgi_setup);
 	uwsgi_register_protocol("puwsgi", uwsgi_proto_puwsgi_setup);
