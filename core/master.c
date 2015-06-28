@@ -26,8 +26,7 @@ void uwsgi_update_load_counters() {
         if (uwsgi.vassal_sos) {
             // 负载过重, 寻找报警
             if (uwsgi.current_time - last_sos > uwsgi.vassal_sos) {
-                uwsgi_log_verbose("asking Emperor for reinforcements (overload: %llu)...\n",
-                                (unsigned long long) ushared->overloaded);
+                uwsgi_log_verbose("asking Emperor for reinforcements (overload: %llu)...\n", (unsigned long long) ushared->overloaded);
                 vassal_sos();
                 last_sos = uwsgi.current_time;
             }

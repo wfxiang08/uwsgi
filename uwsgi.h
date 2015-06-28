@@ -1577,7 +1577,7 @@ struct wsgi_request {
 	char *transformed_chunk;
 	size_t transformed_chunk_len;
 
-	int is_raw;
+    int is_raw;
 
 #ifdef UWSGI_SSL
 	SSL *ssl;

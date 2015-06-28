@@ -1883,7 +1883,7 @@ void uwsgi_dump_worker(int wid, char *msg) {
 	    //
 		struct uwsgi_core *uc = &uwsgi.workers[wid].cores[i];
 		struct wsgi_request *wsgi_req = &uc->req;
-		if (uc->in_request) {
+        if (uc->in_request) {
 			uwsgi_log_verbose("%s [core %d] %.*s - %.*s %.*s since %llu\n", msg, i,
 			                wsgi_req->remote_addr_len, wsgi_req->remote_addr, wsgi_req->method_len, wsgi_req->method,
 			                wsgi_req->uri_len, wsgi_req->uri, (unsigned long long) (wsgi_req->start_of_request/(1000*1000)));
