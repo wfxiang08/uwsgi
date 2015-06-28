@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 # uWSGI build system
 
 uwsgi_version = '2.0.10'
@@ -227,6 +228,8 @@ def build_uwsgi(uc, print_only=False, gcll=None):
     if CPUCOUNT > 1:
         print_lock = Lock()
         compile_queue = Queue(maxsize=CPUCOUNT)
+
+        # 多线程Compile?
         for i in range(0,CPUCOUNT):
             t = Thread(target=thread_compiler,args=(i,))
             t.daemon = True
@@ -1505,6 +1508,7 @@ def vararg_callback(option, opt_str, value, parser):
     setattr(parser.values, option.dest, value)
 
 if __name__ == "__main__":
+    # python uwsgiconfig.py --build
     parser = OptionParser()
     parser.add_option("-b", "--build", action="callback", callback=vararg_callback, dest="build", help="build a specific profile if provided or default.ini", metavar="PROFILE")
     parser.add_option("-f", "--cflags", action="callback", callback=vararg_callback, dest="cflags", help="same as --build but less verbose", metavar="PROFILE")
@@ -1557,7 +1561,10 @@ if __name__ == "__main__":
             gcll = (gcc_list, cflags, ldflags, libs)
         else:
             gcll = None
+
+        # 如何编译: uwsgi呢?
         build_uwsgi(uc, is_cflags, gcll=gcll)
+
     elif options.unbit:
         build_uwsgi(uConf('buildconf/unbit.ini'))
     elif options.plugin:
