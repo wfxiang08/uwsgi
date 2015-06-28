@@ -114,51 +114,47 @@ int init_uwsgi_app(int loader, void *arg1, struct wsgi_request *wsgi_req, PyThre
 
 	// reload "os" environ to allow dynamic setenv()
 	if (up.reload_os_env) {
+        char **e, *p;
+        PyObject *k, *env_value;
 
-                char **e, *p;
-                PyObject *k, *env_value;
+        PyObject *os_module = PyImport_ImportModule("os");
+        if (os_module) {
+            PyObject *os_module_dict = PyModule_GetDict(os_module);
+            PyObject *py_environ = PyDict_GetItemString(os_module_dict, "environ");
+            if (py_environ) {
+                for (e = environ; *e != NULL; e++) {
+                    p = strchr(*e, '=');
+                    if (p == NULL) continue;
 
-        	PyObject *os_module = PyImport_ImportModule("os");
-        	if (os_module) {
-                	PyObject *os_module_dict = PyModule_GetDict(os_module);
-                	PyObject *py_environ = PyDict_GetItemString(os_module_dict, "environ");
-			if (py_environ) {
-                		for (e = environ; *e != NULL; e++) {
-                        		p = strchr(*e, '=');
-                        		if (p == NULL) continue;
+                    k = PyString_FromStringAndSize(*e, (int)(p-*e));
+                    if (k == NULL) {
+                        PyErr_Print();
+                        continue;
+                    }
 
-					k = PyString_FromStringAndSize(*e, (int)(p-*e));
-					if (k == NULL) {
-                                		PyErr_Print();
-                                		continue;
-					}
+                    env_value = PyString_FromString(p+1);
+                    if (env_value == NULL) {
+                        PyErr_Print();
+                        Py_DECREF(k);
+                        continue;
+                    }
 
-                        		env_value = PyString_FromString(p+1);
-                        		if (env_value == NULL) {
-                                		PyErr_Print();
-						Py_DECREF(k);
-                                		continue;
-                        		}
-	
 #ifdef UWSGI_DEBUG
-					uwsgi_log("%s = %s\n", PyString_AsString(k), PyString_AsString(env_value));
+            uwsgi_log("%s = %s\n", PyString_AsString(k), PyString_AsString(env_value));
 #endif
 
-                        		if (PyObject_SetItem(py_environ, k, env_value)) {
-                                		PyErr_Print();
-                        		}
+                    if (PyObject_SetItem(py_environ, k, env_value)) {
+                        PyErr_Print();
+                    }
 
-                        		Py_DECREF(k);
-                        		Py_DECREF(env_value);
-
-                	}
-
-		}
-        	}
+                    Py_DECREF(k);
+                    Py_DECREF(env_value);
+                }
+            }
+        }
 	}
 
 	if (interpreter == NULL && id) {
-
 		wi->interpreter = Py_NewInterpreter();
 		if (!wi->interpreter) {
 			uwsgi_log( "unable to initialize the new python interpreter\n");
@@ -191,6 +187,7 @@ int init_uwsgi_app(int loader, void *arg1, struct wsgi_request *wsgi_req, PyThre
 		}
 	}
 
+	// 调用各种Python API, 将python的callable转换成为C的callable, 然后能和uwsgi的框架集成起来
 	wi->callable = up.loaders[loader](arg1);
 
 	if (!wi->callable) {
@@ -222,7 +219,7 @@ int init_uwsgi_app(int loader, void *arg1, struct wsgi_request *wsgi_req, PyThre
 #ifdef UWSGI_DEBUG
 		uwsgi_log("main mountpoint = %s\n", wi->mountpoint);
 #endif
-		wi->callable = PyDict_GetItem(applications, app_mnt);
+        wi->callable = PyDict_GetItem(applications, app_mnt);
 		if (PyString_Check((PyObject *) wi->callable)) {
 			PyObject *callables_dict = get_uwsgi_pydict((char *)arg1);
 			if (callables_dict) {
@@ -463,6 +460,7 @@ PyObject *uwsgi_uwsgi_loader(void *arg1) {
 	char *module = (char *) arg1;
 
 	quick_callable = get_uwsgi_pymodule(module);
+	// 加载callable, 默认为: application
 	if (quick_callable == NULL) {
 		if (up.callable) {
 			quick_callable = up.callable;

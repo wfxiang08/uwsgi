@@ -699,6 +699,7 @@ static int uwsgi_handler(request_rec *r)
 }
 
 
+// uwsgi作为独立的程序运行
 static int uwsgi_init(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp,
 		server_rec *base_server)
 {

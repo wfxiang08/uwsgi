@@ -145,12 +145,14 @@ int uwsgi_master_manage_events(int interesting_fd) {
 				uwsgi_del_sockets_from_queue(uwsgi.master_queue);
 				// how many worker we need to respawn ?
 				int needed = uwsgi.numproc;
+
 				// if in cheaper mode, just respawn the minimal amount
 				if (uwsgi.cheaper) {
 					needed = uwsgi.cheaper_count;
 				}
 				int i;
 				for (i = 1; i <= needed; i++) {
+				    // fork完毕之后，子进程直接返回
 					if (uwsgi_respawn_worker(i))
 						return -1;
 				}

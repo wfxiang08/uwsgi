@@ -915,14 +915,15 @@ int uwsgi_python_magic(char *mountpoint, char *lazy) {
 }
 
 int uwsgi_python_mount_app(char *mountpoint, char *app) {
-
+    // 如何加载python app呢?
 	int id;
 
 	if (strchr(app, ':') || uwsgi_endswith(app, ".py") || uwsgi_endswith(app, ".wsgi")) {
 		uwsgi.wsgi_req->appid = mountpoint;
 		uwsgi.wsgi_req->appid_len = strlen(mountpoint);
 		// lazy ?
-        	if (uwsgi.mywid > 0) UWSGI_GET_GIL
+        if (uwsgi.mywid > 0) UWSGI_GET_GIL
+
 		if (uwsgi.single_interpreter) {
 			id = init_uwsgi_app(LOADER_MOUNT, app, uwsgi.wsgi_req, up.main_thread, PYTHON_APP_TYPE_WSGI);
 		}
@@ -930,7 +931,7 @@ int uwsgi_python_mount_app(char *mountpoint, char *app) {
 			id = init_uwsgi_app(LOADER_MOUNT, app, uwsgi.wsgi_req, NULL, PYTHON_APP_TYPE_WSGI);
 		}
 		// lazy ?
-        	if (uwsgi.mywid > 0) UWSGI_RELEASE_GIL
+        if (uwsgi.mywid > 0) UWSGI_RELEASE_GIL
 		return id;
 	}
 	return -1;

@@ -16,10 +16,12 @@ uint64_t uwsgi_worker_exceptions(int wid) {
 }
 
 void uwsgi_curse(int wid, int sig) {
+    // 调整: workers的状态
 	uwsgi.workers[wid].cursed_at = uwsgi_now();
-        uwsgi.workers[wid].no_mercy_at = uwsgi.workers[wid].cursed_at + uwsgi.worker_reload_mercy;
+    uwsgi.workers[wid].no_mercy_at = uwsgi.workers[wid].cursed_at + uwsgi.worker_reload_mercy;
 
 	if (sig) {
+	    // mercy/no-mercy体现在如何kill
 		(void) kill(uwsgi.workers[wid].pid, sig);
 	}
 }
@@ -631,9 +633,11 @@ void uwsgi_fixup_fds(int wid, int muleid, struct uwsgi_gateway *ug) {
 
 }
 
+// 重启启动: worker wid
 int uwsgi_respawn_worker(int wid) {
 
 	int respawns = uwsgi.workers[wid].respawn_count;
+
 	// the workers is not accepting (obviously)
 	uwsgi.workers[wid].accepting = 0;
 	// we count the respawns before errors...
@@ -666,11 +670,14 @@ int uwsgi_respawn_worker(int wid) {
 		pthread_mutex_lock(&uwsgi.threaded_logger_lock);
 	}
 
+	// fork一个新的进程
 	pid_t pid = uwsgi_fork(uwsgi.workers[wid].name);
 
 	if (pid == 0) {
+	    // 子进程中如果spawn一个新的进程呢?
 		signal(SIGWINCH, worker_wakeup);
 		signal(SIGTSTP, worker_wakeup);
+
 		uwsgi.mywid = wid;
 		uwsgi.mypid = getpid();
 		// pid is updated by the master
@@ -700,8 +707,9 @@ int uwsgi_respawn_worker(int wid) {
 		// reset the apps count with a copy from the master 
 		uwsgi.workers[uwsgi.mywid].apps_cnt = uwsgi.workers[0].apps_cnt;
 
+		// cores的状态?
 		// reset wsgi_request structures
-		for(i=0;i<uwsgi.cores;i++) {
+        for (i = 0; i < uwsgi.cores;i++) {
 			uwsgi.workers[uwsgi.mywid].cores[i].in_request = 0;
 			memset(&uwsgi.workers[uwsgi.mywid].cores[i].req, 0, sizeof(struct wsgi_request));
 		}
@@ -1503,7 +1511,11 @@ void uwsgi_register_cheaper_algo(char *name, int (*func) (int)) {
 
 void trigger_harakiri(int i) {
 	int j;
+	// 只有可能存在问题时，才会触发当前的函数
+	// Sun Jun 28 10:04:18 2015 - *** HARAKIRI ON WORKER 29 (pid: 31772, try: 1) ***
+	//
 	uwsgi_log_verbose("*** HARAKIRI ON WORKER %d (pid: %d, try: %d) ***\n", i, uwsgi.workers[i].pid, uwsgi.workers[i].pending_harakiri + 1);
+
 	if (uwsgi.harakiri_verbose) {
 #ifdef __linux__
 		int proc_file;
@@ -1539,7 +1551,9 @@ void trigger_harakiri(int i) {
 #endif
 	}
 
+	// 如何还活着?
 	if (uwsgi.workers[i].pid > 0) {
+	    // gp/p是什么东西?
 		for (j = 0; j < uwsgi.gp_cnt; j++) {
 			if (uwsgi.gp[j]->harakiri) {
 				uwsgi.gp[j]->harakiri(i);
@@ -1551,8 +1565,12 @@ void trigger_harakiri(int i) {
 			}
 		}
 
+		// dump当前uwsgi的所有的request的信息
 		uwsgi_dump_worker(i, "HARAKIRI");
+
+		// 强制杀死
 		kill(uwsgi.workers[i].pid, SIGKILL);
+
 		if (!uwsgi.workers[i].pending_harakiri)
 			uwsgi.workers[i].harakiri_count++;
 		uwsgi.workers[i].pending_harakiri++;
@@ -1853,12 +1871,22 @@ clear:
 */
 void uwsgi_dump_worker(int wid, char *msg) {
 	int i;
+	// 例如:
+	//       Sun Jun 28 09:24:13 2015 - HARAKIRI !!! worker 1 status !!!
+	//
+	//       Sun Jun 28 09:24:13 2015 - HARAKIRI !!! end of worker 1 status !!!
 	uwsgi_log_verbose("%s !!! worker %d status !!!\n", msg, wid);
-	for(i=0;i<uwsgi.cores;i++) {
+	for(i=0; i<uwsgi.cores; i++) {
+	    // 每一个worker可以同时保持多个连接
+	    // 这些链接中断会促发什么样的动作？
+	    // nginx 和 uwsgi之间的上千个链接如果中断会怎么处理呢?
+	    //
 		struct uwsgi_core *uc = &uwsgi.workers[wid].cores[i];
 		struct wsgi_request *wsgi_req = &uc->req;
 		if (uc->in_request) {
-			uwsgi_log_verbose("%s [core %d] %.*s - %.*s %.*s since %llu\n", msg, i, wsgi_req->remote_addr_len, wsgi_req->remote_addr, wsgi_req->method_len, wsgi_req->method, wsgi_req->uri_len, wsgi_req->uri, (unsigned long long) (wsgi_req->start_of_request/(1000*1000)));
+			uwsgi_log_verbose("%s [core %d] %.*s - %.*s %.*s since %llu\n", msg, i,
+			                wsgi_req->remote_addr_len, wsgi_req->remote_addr, wsgi_req->method_len, wsgi_req->method,
+			                wsgi_req->uri_len, wsgi_req->uri, (unsigned long long) (wsgi_req->start_of_request/(1000*1000)));
 		}
 	}
 	uwsgi_log_verbose("%s !!! end of worker %d status !!!\n",msg, wid);

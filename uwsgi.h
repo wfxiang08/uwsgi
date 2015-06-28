@@ -2118,7 +2118,7 @@ struct uwsgi_server {
 	struct uwsgi_string_list *exec_in_jail;
 	struct uwsgi_string_list *exec_as_root;
 	struct uwsgi_string_list *exec_as_user;
-	struct uwsgi_string_list *exec_as_user_atexit;
+    struct uwsgi_string_list *exec_as_user_atexit;
 	struct uwsgi_string_list *exec_pre_app;
 	struct uwsgi_string_list *exec_post_app;
 
@@ -2320,12 +2320,17 @@ struct uwsgi_server {
 	struct uwsgi_string_list *reload_on_fd;
 	struct uwsgi_string_list *brutal_reload_on_fd;
 
+	// 目前我们的重启方式: touch_reload, 似乎更好的方式是: touch_workers_reload
 	struct uwsgi_string_list *touch_reload;
 	struct uwsgi_string_list *touch_chain_reload;
+
 	struct uwsgi_string_list *touch_workers_reload;
 	struct uwsgi_string_list *touch_gracefully_stop;
+
+	// 两种log的处理方式有什么不一样呢?
 	struct uwsgi_string_list *touch_logrotate;
 	struct uwsgi_string_list *touch_logreopen;
+
 	struct uwsgi_string_list *touch_exec;
 	struct uwsgi_string_list *touch_signal;
 
@@ -2383,7 +2388,9 @@ struct uwsgi_server {
 	size_t post_buffering_bufsize;
 	size_t body_read_warning;
 
+	// 当前的process是否为master, 否则为worker
 	int master_process;
+
 	int master_queue;
 	int master_interval;
 
@@ -2885,6 +2892,7 @@ struct uwsgi_shared {
 	int ready;
 };
 
+// 记录了一个request相关的所有的信息
 struct uwsgi_core {
 
 	//time_t harakiri;

@@ -1632,12 +1632,15 @@ void uwsgi_setup_shared_sockets() {
 }
 
 void uwsgi_map_sockets() {
-	struct uwsgi_socket *uwsgi_sock = uwsgi.sockets;
+
+    // 管理自己当前的sockets
+    struct uwsgi_socket *uwsgi_sock = uwsgi.sockets;
 	while (uwsgi_sock) {
 		struct uwsgi_string_list *usl = uwsgi.map_socket;
 		int enabled = 1;
 		while (usl) {
 
+		    // socket:worker,worker?
 			char *colon = strchr(usl->value, ':');
 			if (!colon) {
 				uwsgi_log("invalid socket mapping, must be socket:worker[,worker...]\n");

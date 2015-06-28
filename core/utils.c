@@ -3430,10 +3430,17 @@ char *uwsgi_check_touches(struct uwsgi_string_list *touch_list) {
 	// touch->custom  - file timestamp
 	// touch->custom2 - 0 if file exists, 1 if it does not exists
 
+    // 如果之前有文件，现在被删除
+    //    之前没有文件，现在添加
+    //    之前有文件，现在被touch, 都会触发: touch->custom_ptr ? touch->custom_ptr : touch->value
+    // touch_list中只要有一个变化就可以了，其他的就不再检测了
+    //
+
 	struct uwsgi_string_list *touch = touch_list;
 	while (touch) {
 		struct stat tr_st;
 		if (stat(touch->value, &tr_st)) {
+		    // 如果获取文件的stat失败, 则: custom2: 0 ---> 1 (touched)
 			if (touch->custom && !touch->custom2) {
 #ifdef UWSGI_DEBUG
 				uwsgi_log("[uwsgi-check-touches] File %s was removed\n", touch->value);
@@ -3442,16 +3449,20 @@ char *uwsgi_check_touches(struct uwsgi_string_list *touch_list) {
 				return touch->custom_ptr ? touch->custom_ptr : touch->value;
 			}
 			else if (!touch->custom && !touch->custom2) {
+			    // 文件似乎就没有存在过: custom没有, custome2也没有，然后标记: custom2
 				uwsgi_log("unable to stat() %s, events will be triggered as soon as the file is created\n", touch->value);
 				touch->custom2 = 1;
 			}
 			touch->custom = 0;
 		}
 		else {
+		    // 成功获取文件信息
 			if (!touch->custom && touch->custom2) {
+			    // 没有时间，之前没有文件(是在程序运行期间变化的)
 #ifdef UWSGI_DEBUG
 				uwsgi_log("[uwsgi-check-touches] File was created: %s\n", touch->value);
 #endif
+				// 切换状态
 				touch->custom = (uint64_t) tr_st.st_mtime;
 				touch->custom2 = 0;
 				return touch->custom_ptr ? touch->custom_ptr : touch->value;

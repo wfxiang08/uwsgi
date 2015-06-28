@@ -172,14 +172,22 @@ done:
 int uwsgi_master_check_workers_deadline() {
 	int i;
 	int ret = 0;
+
+	// 检查每一个uwsgi的进程
 	for (i = 1; i <= uwsgi.numproc; i++) {
 		/* first check for harakiri */
+
+	    // 1. 如果存在: harakiri, 则需要考虑workers的 trigger_harakiri
+	    //    如何选择合适的时间，确实有不少请求因为时间过长，被干死的
 		if (uwsgi.workers[i].harakiri > 0) {
 			if (uwsgi.workers[i].harakiri < (time_t) uwsgi.current_time) {
 				trigger_harakiri(i);
 				ret = 1;
 			}
 		}
+
+		// 2. 如何定义呢? user_harakiri
+		// 用户自定义的，也得先考虑系统定义的
 		/* then user-defined harakiri */
 		if (uwsgi.workers[i].user_harakiri > 0) {
 			if (uwsgi.workers[i].user_harakiri < (time_t) uwsgi.current_time) {
@@ -187,6 +195,8 @@ int uwsgi_master_check_workers_deadline() {
 				ret = 1;
 			}
 		}
+
+		// 目前我们的服务还没有因为内存不够，而重启的
 		// then for evil memory checkers
 		if (uwsgi.evil_reload_on_as) {
 			if ((rlim_t) uwsgi.workers[i].vsz_size >= uwsgi.evil_reload_on_as) {
@@ -204,6 +214,8 @@ int uwsgi_master_check_workers_deadline() {
 				ret = 1;
 			}
 		}
+
+		// 一天一重启，也似乎不会有太多
 		// check if worker was running longer than allowed lifetime
 		if (uwsgi.workers[i].pid > 0 && uwsgi.workers[i].cheaped == 0 && uwsgi.max_worker_lifetime > 0) {
 			uint64_t lifetime = uwsgi_now() - uwsgi.workers[i].last_spawn;
