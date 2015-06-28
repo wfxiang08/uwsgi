@@ -3,6 +3,7 @@ project(uwsgi_py)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
+include_directories(/System/Library/Frameworks/Python.framework/Versions/2.7/include/python2.7 .)
 set(SOURCE_FILES uwsgi_main.c uwsgi.h)
 add_executable(uwsgi_py ${SOURCE_FILES} core/alarm.c core/errors.c core/legion.c core/offload.c core/sendfile.c core/strings.c
                                      core/async.c core/event.c core/lock.c core/plugins.c core/setup_utils.c core/subscription.c
