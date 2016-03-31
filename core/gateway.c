@@ -26,7 +26,7 @@ struct uwsgi_gateway *register_gateway(char *name, void (*loop) (int, void *), v
 	ug->pid = 0;
 	ug->name = name;
 	ug->loop = loop;
-	ug->num = num;
+	ug->num = num;  // 最后一个名字相同的gateways的位置
 	ug->fullname = fullname;
 	ug->data = data;
 	ug->uid = 0;

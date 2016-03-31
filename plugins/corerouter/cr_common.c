@@ -111,6 +111,9 @@ void *uwsgi_corerouter_setup_event_queue(struct uwsgi_corerouter *ucr, int id) {
 	return event_queue_alloc(ucr->nevents);
 }
 
+//
+// 如何处理 subscription呢?
+//
 void uwsgi_corerouter_manage_subscription(struct uwsgi_corerouter *ucr, int id, struct uwsgi_gateway_socket *ugs) {
 
 	int i;
@@ -122,10 +125,12 @@ void uwsgi_corerouter_manage_subscription(struct uwsgi_corerouter *ucr, int id, 
 
 	if (uwsgi.subscriptions_use_credentials) {
 		len = uwsgi_recv_cred2(ugs->fd, bbuf, 4096, &usr.pid, &usr.uid, &usr.gid);
-	}
-	else {
+	} else {
+		// 1. 读取buf
 		len = recv(ugs->fd, bbuf, 4096, 0);
 	}
+	
+	
 	if (len > 0) {
 		uwsgi_hooked_parse(bbuf + 4, len - 4, corerouter_manage_subscription, &usr);
 		if (usr.sign_len > 0) {
@@ -134,8 +139,10 @@ void uwsgi_corerouter_manage_subscription(struct uwsgi_corerouter *ucr, int id, 
 			usr.base_len = len - 4 - (2 + 4 + 2 + usr.sign_len);
 		}
 
+		// 接受subscription的请求
 		// subscribe request ?
 		if (bbuf[3] == 0) {
+			// 添加Node
 			if (uwsgi_add_subscribe_node(ucr->subscriptions, &usr) && ucr->i_am_cheap) {
 				struct uwsgi_gateway_socket *ugs = uwsgi.gateway_sockets;
 				while (ugs) {
@@ -163,10 +170,16 @@ void uwsgi_corerouter_manage_subscription(struct uwsgi_corerouter *ucr, int id, 
 					uwsgi_log("[%s pid %d] %.*s => marking %.*s as failed\n", ucr->name, (int) uwsgi.mypid, (int) usr.keylen, usr.key, (int) usr.address_len, usr.address);
 				node->failcnt++;
 				node->death_mark = 1;
+				
+				// 删除Node
 				// check if i can remove the node
+				// 下线不是立即下线
 				if (node->reference == 0) {
 					uwsgi_remove_subscribe_node(ucr->subscriptions, node);
 				}
+				
+				// 如果接收到: cheap指令，则进行cheap检测
+				// uwsgi_gateway_go_cheap: 状态，权限等
 				if (ucr->cheap && !ucr->i_am_cheap && uwsgi_no_subscriptions(ucr->subscriptions)) {
 					uwsgi_gateway_go_cheap(ucr->name, ucr->queue, &ucr->i_am_cheap);
 				}

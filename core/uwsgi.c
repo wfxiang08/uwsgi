@@ -199,6 +199,8 @@ static struct uwsgi_option uwsgi_base_options[] = {
 	{"procname-prefix", required_argument, 0, "add a prefix to the process names", uwsgi_opt_set_str, &uwsgi.procname_prefix, UWSGI_OPT_PROCNAME},
 	{"procname-prefix-spaced", required_argument, 0, "add a spaced prefix to the process names", uwsgi_opt_set_str_spaced, &uwsgi.procname_prefix, UWSGI_OPT_PROCNAME},
 	{"procname-append", required_argument, 0, "append a string to process names", uwsgi_opt_set_str, &uwsgi.procname_append, UWSGI_OPT_PROCNAME},
+	
+	// 设置进程的名字
 	{"procname", required_argument, 0, "set process names", uwsgi_opt_set_str, &uwsgi.procname, UWSGI_OPT_PROCNAME},
 	{"procname-master", required_argument, 0, "set master process name", uwsgi_opt_set_str, &uwsgi.procname_master, UWSGI_OPT_PROCNAME},
 

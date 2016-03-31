@@ -1810,7 +1810,7 @@ struct uwsgi_server {
 	int master_is_reforked;
 
 	struct uwsgi_string_list *master_fifo;
-	int master_fifo_fd;
+	int master_fifo_fd; 
 	int master_fifo_slot;
 
 

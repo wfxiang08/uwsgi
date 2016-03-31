@@ -732,11 +732,13 @@ int event_queue_wait(int eq, int timeout, int *interesting_fd) {
 
 #endif
 
+#define UWSGI_EVENT_USE_KQUEUE
 #ifdef UWSGI_EVENT_USE_KQUEUE
 
 #define UWSGI_EVENT_IN EVFILT_READ
 #define UWSGI_EVENT_OUT EVFILT_WRITE
 
+// 创建Event Queue, 返回一个Queue Id
 int event_queue_init() {
 
 	int kfd = kqueue();
@@ -749,6 +751,8 @@ int event_queue_init() {
 	return kfd;
 }
 
+// 关注: fd 的变化: write 2 read
+// 结果放在 eq 对应的queue中
 int event_queue_fd_write_to_read(int eq, int fd) {
 
 	struct kevent kev;
@@ -768,6 +772,9 @@ int event_queue_fd_write_to_read(int eq, int fd) {
 	return 0;
 }
 
+
+// 关注: fd 的变化: read 2 write
+// 结果放在 eq 对应的queue中
 int event_queue_fd_read_to_write(int eq, int fd) {
 
 	struct kevent kev;
@@ -787,6 +794,9 @@ int event_queue_fd_read_to_write(int eq, int fd) {
 	return 0;
 }
 
+
+// 关注: fd 的变化: read&write 2 read
+// 结果放在 eq 对应的queue中
 int event_queue_fd_readwrite_to_read(int eq, int fd) {
 
 	struct kevent kev;
@@ -800,6 +810,8 @@ int event_queue_fd_readwrite_to_read(int eq, int fd) {
 	return 0;
 }
 
+// 关注: fd 的变化: read&write 2 write
+// 结果放在 eq 对应的queue中
 int event_queue_fd_readwrite_to_write(int eq, int fd) {
 
 	struct kevent kev;
@@ -813,6 +825,8 @@ int event_queue_fd_readwrite_to_write(int eq, int fd) {
 	return 0;
 }
 
+// 关注: fd 的变化: read to read&write
+// 结果放在 eq 对应的queue中
 int event_queue_fd_read_to_readwrite(int eq, int fd) {
 
 	struct kevent kev;
@@ -827,11 +841,25 @@ int event_queue_fd_read_to_readwrite(int eq, int fd) {
 }
 
 
+// 关注: fd 的变化: write to read&write
+// 结果放在 eq 对应的queue中
 int event_queue_fd_write_to_readwrite(int eq, int fd) {
 
 	struct kevent kev;
 
 	EV_SET(&kev, fd, EVFILT_READ, EV_ADD, 0, 0, 0);
+    
+    // http://blog.csdn.net/linuxchen/article/details/2223475
+    // kevent 使用分析
+
+    // eventlist 为空
+    // kevent 阻塞，直到事情发生
+    // kev 长度为1
+    // 最终要做啥呢?
+    // 将kev传给: eq, 然后在某个地方执行?
+    // changelist参数用于注册或修改事件，并且将在从kqueue读出事件之前得到处理
+    // &kev, 1: 用于写数据，控制fd
+    // NULL, 0: 用于读数据，从fd获取数据
 	if (kevent(eq, &kev, 1, NULL, 0, NULL) < 0) {
 		uwsgi_error("kevent()");
 		return -1;
@@ -891,10 +919,10 @@ int event_queue_wait_multi(int eq, int timeout, void *events, int nevents) {
 	int ret;
 	struct timespec ts;
 
+    // 1. 等待读取: nevents(timeout or without timeout)
 	if (timeout < 0) {
 		ret = kevent(eq, NULL, 0, events, nevents, NULL);
-	}
-	else {
+	} else {
 		memset(&ts, 0, sizeof(struct timespec));
 		ts.tv_sec = timeout;
 		ret = kevent(eq, NULL, 0, (struct kevent *) events, nevents, &ts);
@@ -909,6 +937,7 @@ int event_queue_wait_multi(int eq, int timeout, void *events, int nevents) {
 
 }
 
+// 获取event_queue关联的fd
 int event_queue_interesting_fd(void *events, int id) {
 
 	struct kevent *ev = (struct kevent *) events;

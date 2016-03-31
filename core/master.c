@@ -130,24 +130,27 @@ void uwsgi_master_manage_udp(int udp_fd) {
 	}
 }
 
+// 如果是Master收到消息，则暂停或者重启所有的workers
 void suspend_resume_them_all(int signum) {
 
 	int i;
 	int suspend = 0;
 
+	// 1. 状态切换
 	if (uwsgi.workers[0].suspended == 1) {
 		uwsgi_log_verbose("*** (SIGTSTP received) resuming workers ***\n");
 		uwsgi.workers[0].suspended = 0;
-	}
-	else {
+	} else {
 		uwsgi_log_verbose("*** PAUSE (press start to resume, if you do not have a joypad send SIGTSTP) ***\n");
 		suspend = 1;
 		uwsgi.workers[0].suspended = 1;
 	}
 
+	// 2. 订阅或取消订阅
 	// subscribe/unsubscribe if needed
 	uwsgi_subscribe_all(suspend, 1);
 
+	// 3. 暂停工作
 	for (i = 1; i <= uwsgi.numproc; i++) {
 		uwsgi.workers[i].suspended = suspend;
 		if (uwsgi.workers[i].pid > 0) {
@@ -165,6 +168,7 @@ void uwsgi_master_check_mercy() {
 
 	for (i = 1; i <= uwsgi.numproc; i++) {
 		if (uwsgi.workers[i].pid > 0 && uwsgi.workers[i].cursed_at) {
+			// 如果过了: cursed_at, 并且过了: no_mercy_at, 则直接杀死
 			if (uwsgi_now() > uwsgi.workers[i].no_mercy_at) {
 				uwsgi_log_verbose("worker %d (pid: %d) is taking too much time to die...NO MERCY !!!\n", i, uwsgi.workers[i].pid);
 				// yes that look strangem but we avoid callign it again if we skip waitpid() call below
@@ -173,6 +177,7 @@ void uwsgi_master_check_mercy() {
 		}
 	}
 
+	// 处理: mules的自杀问题
 	for (i = 0; i < uwsgi.mules_cnt; i++) {
 		if (uwsgi.mules[i].pid > 0 && uwsgi.mules[i].cursed_at) {
 			if (uwsgi_now() > uwsgi.mules[i].no_mercy_at) {
@@ -346,6 +351,7 @@ int master_loop(char **argv, char **environ) {
 	struct uwsgi_rb_timer *min_timeout;
 	struct uwsgi_rbtree *rb_timers = uwsgi_init_rb_timer();
 
+	// 1. 设置: 进程的名字
 	if (uwsgi.procname_master) {
 		uwsgi_set_processname(uwsgi.procname_master);
 	}
@@ -357,8 +363,10 @@ int master_loop(char **argv, char **environ) {
 	}
 
 
+	// 2. 时间设置
 	uwsgi.current_time = uwsgi_now();
 
+	// 3. 设置各种signal
 	uwsgi_unix_signal(SIGTSTP, suspend_resume_them_all);
 	uwsgi_unix_signal(SIGHUP, grace_them_all);
 
@@ -368,21 +376,27 @@ int master_loop(char **argv, char **environ) {
 	uwsgi_unix_signal(SIGINT, kill_them_all);
 	uwsgi_unix_signal(SIGUSR1, stats);
 
+	// 4. atexit的使用，清理工作
 	atexit(uwsgi_master_cleanup_hooks);
 
+	// 创建master_queue
 	uwsgi.master_queue = event_queue_init();
 
 	/* route signals to workers... */
 #ifdef UWSGI_DEBUG
 	uwsgi_log("adding %d to signal poll\n", uwsgi.shared->worker_signal_pipe[0]);
 #endif
+	// master_queue --> 和 pipe 关联，后续如何操作呢?
+	// 
 	event_queue_add_fd_read(uwsgi.master_queue, uwsgi.shared->worker_signal_pipe[0]);
 
+	// 创建: master_fifo文件，接受来自用户的信息输入
 	if (uwsgi.master_fifo) {
 		uwsgi.master_fifo_fd = uwsgi_master_fifo();
 		event_queue_add_fd_read(uwsgi.master_queue, uwsgi.master_fifo_fd);
 	}
 
+	// notify_socket做什么的?
 	if (uwsgi.notify_socket) {
 		uwsgi.notify_socket_fd = bind_to_unix_dgram(uwsgi.notify_socket);
 		uwsgi_log("notification socket enabled on %s (fd: %d)\n", uwsgi.notify_socket, uwsgi.notify_socket_fd);
@@ -535,6 +549,7 @@ int master_loop(char **argv, char **environ) {
 		}
 	}
 
+	// 关注修改时间
 	// update touches timestamps
 	uwsgi_check_touches(uwsgi.touch_reload);
 	uwsgi_check_touches(uwsgi.touch_logrotate);
@@ -542,6 +557,7 @@ int master_loop(char **argv, char **environ) {
 	uwsgi_check_touches(uwsgi.touch_chain_reload);
 	uwsgi_check_touches(uwsgi.touch_workers_reload);
 	uwsgi_check_touches(uwsgi.touch_gracefully_stop);
+	
 	// update exec touches
 	struct uwsgi_string_list *usl = uwsgi.touch_exec;
 	while (usl) {
@@ -786,6 +802,8 @@ int master_loop(char **argv, char **environ) {
 			if (now - uwsgi.current_time < 1) {
 				continue;
 			}
+			
+			// 以下事情最多1s做一次
 			uwsgi.current_time = now;
 
 			// checking logsize
@@ -831,9 +849,12 @@ int master_loop(char **argv, char **environ) {
 			}
 #endif
 #endif
-
+			// 如果存在订阅，则再某些情况下主动订阅
+			// 启动、每10个cycles
+			// 在运维期间不订阅
 			// resubscribe every 10 cycles by default
-			if (((uwsgi.subscriptions || uwsgi.subscriptions2) && ((uwsgi.master_cycles % uwsgi.subscribe_freq) == 0 || uwsgi.master_cycles == 1)) && !uwsgi_instance_is_reloading && !uwsgi_instance_is_dying && !uwsgi.workers[0].suspended) {
+			if (((uwsgi.subscriptions || uwsgi.subscriptions2) && ((uwsgi.master_cycles % uwsgi.subscribe_freq) == 0 || uwsgi.master_cycles == 1)) 
+				&& !uwsgi_instance_is_reloading && !uwsgi_instance_is_dying && !uwsgi.workers[0].suspended) {
 				uwsgi_subscribe_all(0, 0);
 			}
 
